@@ -1,8 +1,11 @@
 #include "globals.h"
 
 // Firmware
-const char *SW_VERSION = "0.1.2";
+const char *SW_VERSION = "0.1.0";
 const char *BINARY_NAME = "esp32devkitc.bin";
+
+// GitHub
+const char *releaseRepo = "rmfalco89/esp32-project-template";
 
 // Watchdog
 const int watchdogTimeout_s = 30;
@@ -18,6 +21,3 @@ const uint32_t wifiConnectionStatusCheckMillis = 20 * 60 * 1000; // 20s
 const uint16_t wifiConnectionMaxMillis = 20 * 1000;              // 30s
 const IPAddress dns(8, 8, 8, 8);                                 // Google's DNS
 
-// GitHub
-const char *releaseRepo = "rmfalco89/<myproj>";
-const char *GITHUB_TOKEN = "your_github_token"; // Update with your GitHub token

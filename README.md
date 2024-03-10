@@ -53,5 +53,13 @@ This template takes care of saving the configuration to the EEPROM, and exposes 
 ### OTA update
 If github authentication info are set in `config.cpp`, the code will periodically check for updates on github.  
 This works also for private repositories.  
-Furthermore, it's possible to force-check for updates by navigating to `http://<hostname>/checkForUpdates`.  
-It is also possible to load a new given firmware manually by navigating to `http://<hostname>/uploadFirmware`
+It's possible to force-check for updates by navigating to `http://<hostname>/checkForUpdates`.  
+It is also possible to upload a new firmware through the browser by navigating to `http://<hostname>/uploadFirmware`.
+
+### Server default routes
+- `/`: home
+- `/reboot`: reboot
+- `/configure`: configure
+- `/invalidateConfig`: delete old configuration (forces config mode on restart)
+- `/checkForUpdates`: checks for new firmware on github
+- `/uploadFirmware`: allows upload of firmware via the browser

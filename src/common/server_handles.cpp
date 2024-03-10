@@ -48,21 +48,6 @@ void routeCheckUpdate()
     updater->upgradeSoftware();
 }
 
-// void routeUploadFirmware() {
-//     DEBUG_PRINTLN("routeUploadFirmware");
-
-//     // Update the form to include 'enctype' attribute for file upload
-//     // and change the input type to 'file'.
-//     String html = String(F("<!DOCTYPE html> \
-// <html><head><meta charset=\"utf-8\"><title>ESP32 Firmware Upgrade</title></head><body>\
-// <form method=\"post\" enctype=\"multipart/form-data\" action=\"/firmwareUploadSave\">\
-// <label for=\"firmware\">Firmware File: </label>\
-// <input type=\"file\" id=\"firmware\" name=\"firmware\"><br/>\
-// <input type=\"submit\" value=\"Upload\"></form></body></html>"));
-
-//     webServer->send(200, "text/html", html);
-// }
-
 String formatDeviceConfigurationHtmlTemplate()
 {
     String ssid_str = currentDeviceConfiguration == nullptr ? "" : currentDeviceConfiguration->ssid;

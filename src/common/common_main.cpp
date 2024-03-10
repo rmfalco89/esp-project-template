@@ -39,7 +39,7 @@ void common_setup()
     setupServer(configMode);
 
     // OTA Updater
-    updater = new ESP32_GithubOtaUpdate(SW_VERSION, BINARY_NAME, releaseRepo, GITHUB_TOKEN);
+    updater = new ESP32_GithubOtaUpdate(SW_VERSION, BINARY_NAME, releaseRepo, currentDeviceConfiguration->githubAuthToken);
     updater->registerFirmwareUploadRoutes(webServer);
     if (!configMode)
         updater->upgradeSoftware(); // Check and perform upgrade on startup

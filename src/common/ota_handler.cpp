@@ -5,6 +5,21 @@
 #include <HTTPUpdate.h>
 #include <WiFi.h>
 
+#define DEBUG
+#ifdef DEBUG
+#define DEBUG_PRINT(str)   \
+    {                      \
+        Serial.print(str); \
+    }
+#define DEBUG_PRINTLN(str)   \
+    {                        \
+        Serial.println(str); \
+    }
+#else
+#define DEBUG_PRINT(str)
+#define DEBUG_PRINTLN(str)
+#endif
+
 uint32_t checkForSoftwareUpdateMillis = 60 * 60 * 1000; // check for software update every 1 hour
 uint64_t lastCheckForUpdateMillis = 0;
 
@@ -23,12 +38,26 @@ void ESP32_GithubOtaUpdate::getLatestReleaseInfo(char *&version, char *&updateUR
     String url = String("https://api.github.com/repos/") + releaseRepo + "/releases/latest";
     String payload;
 
+    DEBUG_PRINTLN(String("Requesting ") + url);
     httpClient.begin(secureClient, url);
     httpClient.addHeader("Authorization", String("token ") + authToken);
     int httpCode = httpClient.GET();
 
+    if (httpCode == HTTP_CODE_UNAUTHORIZED)
+    {
+        if (strlen(authToken) == 0)
+            Serial.println(F("Got 401 Unauthorized, and github token is empty. Check your configuration"));
+
+        else
+            Serial.println(F("Got 401 Unauthorized. Check if your github token is valid and not expired."));
+    }
+
+    DEBUG_PRINT("OTA Update: got code ");
+    DEBUG_PRINTLN(String(httpCode));
+
     if (httpCode == HTTP_CODE_OK)
     {
+        DEBUG_PRINTLN(String("Got response from ") + url);
         payload = httpClient.getString();
 
         JsonDocument doc;
@@ -44,6 +73,8 @@ void ESP32_GithubOtaUpdate::getLatestReleaseInfo(char *&version, char *&updateUR
             if (String(name) == binaryFileName)
             {
                 const char *browserDownloadUrl = asset["browser_download_url"];
+                DEBUG_PRINT("OTA Update: found download URL: ");
+                DEBUG_PRINTLN(browserDownloadUrl);
                 version = strdup(tagName);
                 updateURL = strdup(browserDownloadUrl);
                 break;
@@ -66,9 +97,16 @@ bool ESP32_GithubOtaUpdate::isNewerVersionAvailable(char *&latestVersion, char *
     int latestMajor, latestMinor, latestPatch;
     sscanf(currentVersion, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch);
     sscanf(latestVersion, "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch);
-    return (latestMajor > currentMajor) ||
-           (latestMajor == currentMajor && latestMinor > currentMinor) ||
-           (latestMajor == currentMajor && latestMinor == currentMinor && latestPatch > currentPatch);
+    bool newer_firmware = (latestMajor > currentMajor) ||
+                          (latestMajor == currentMajor && latestMinor > currentMinor) ||
+                          (latestMajor == currentMajor && latestMinor == currentMinor && latestPatch > currentPatch);
+    if (newer_firmware)
+    {
+        DEBUG_PRINT("Found new firmware at ");
+        DEBUG_PRINTLN(updateURL);
+    }
+
+    return newer_firmware;
 }
 
 ESP32_GithubOtaUpdate::ESP32_GithubOtaUpdate(const char *v, const char *b, const char *r, const char *a) : currentVersion(v), binaryFileName(b), releaseRepo(r), authToken(a)
@@ -79,7 +117,10 @@ ESP32_GithubOtaUpdate::ESP32_GithubOtaUpdate(const char *v, const char *b, const
 void ESP32_GithubOtaUpdate::upgradeSoftware()
 {
     if (!isInited)
+    {
+        DEBUG_PRINTLN(F("OTA Updater not inited. Exiting"));
         return;
+    }
     char *latestVersion = nullptr;
     char *updateURL = nullptr;
     if (isNewerVersionAvailable(latestVersion, updateURL) && updateURL != nullptr)
@@ -88,7 +129,7 @@ void ESP32_GithubOtaUpdate::upgradeSoftware()
     }
     else
     {
-        Serial.println("Latest firmware is already installed.");
+        Serial.println("Couldn't find new firmware");
     }
     if (latestVersion)
         free(latestVersion);
@@ -106,6 +147,8 @@ void ESP32_GithubOtaUpdate::upgradeSoftware(const char *updateURL)
 
     WiFiClientSecure secureClient;
     secureClient.setInsecure(); // Skip certificate verification
+    httpUpdate.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS); // for some reason github redirects all the time (throws a 302)
+
     t_httpUpdate_return ret = httpUpdate.update(secureClient, updateURL, currentVersion);
     if (ret == HTTP_UPDATE_OK)
     {
@@ -137,7 +180,7 @@ void ESP32_GithubOtaUpdate::registerFirmwareUploadRoutes(WebServer *webServer)
     // Handler for the file upload form
     webServer->on("/uploadFirmware", HTTP_GET, [webServer]()
                   {
-        Serial.println("routeUploadFirmware");
+        DEBUG_PRINTLN("routeUploadFirmware");
         String html = "<!DOCTYPE html><html><head><title>Upload Firmware</title></head><body>"
                       "<form method='post' action='/firmwareUploadSave' enctype='multipart/form-data'>"
                       "<input type='file' name='firmware'>"
@@ -152,7 +195,7 @@ void ESP32_GithubOtaUpdate::registerFirmwareUploadRoutes(WebServer *webServer)
         { webServer->send(200, "text/plain", "Upload complete. Device will restart."); },
         [webServer]()
         {
-            Serial.println("routeFirmwareUploadSave");
+            DEBUG_PRINTLN("routeFirmwareUploadSave");
             HTTPUpload &upload = webServer->upload();
             if (upload.status == UPLOAD_FILE_START)
             {

@@ -4,10 +4,10 @@
 #include <EEPROM.h>
 #include <Arduino.h>
 
-#include "globals.h"
+#include "common/globals.h"
 
 #ifndef EEPROM_SIZE
-#define EEPROM_SIZE 256
+#define EEPROM_SIZE 512
 #endif
 
 using checksum_type = uint32_t;
@@ -15,6 +15,7 @@ using checksum_type = uint32_t;
 template <typename T>
 T *readDataFromEeprom(const int eepromAddress)
 {
+    DEBUG_PRINTLN(String("Reading from EEPROM address ") + String(eepromAddress));
     EEPROM.begin(EEPROM_SIZE);
 
     // read checksum first, then data
@@ -36,6 +37,7 @@ T *readDataFromEeprom(const int eepromAddress)
 template <typename T>
 void writeDataToEeprom(int eepromAddress, T *data)
 {
+    DEBUG_PRINTLN(String("Writing to EEPROM address ") + String(eepromAddress));
     EEPROM.begin(EEPROM_SIZE);
 
     checksum_type checksum = calculateChecksum(data);
@@ -66,6 +68,16 @@ void invalidateEepromData(const int eepromAddress)
     EEPROM.put(eepromAddress, empty);
     EEPROM.commit();
     EEPROM.end();
+}
+
+template <typename T>
+int nextEepromSlot(int previousSlotStartAddress)
+{
+    // checksum + size of previous struct:
+    int address = sizeof(T) + sizeof(checksum_type);
+    // add offset:
+    address += previousSlotStartAddress;
+    return address;
 }
 
 #endif

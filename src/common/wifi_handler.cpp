@@ -4,7 +4,7 @@
 #include <WiFi.h>
 #include <ESPmDNS.h>
 
-#include "globals.h"
+#include "common/globals.h"
 #include "device_configuration.h"
 
 const char *ssid, *password, *hostname;
@@ -58,7 +58,7 @@ bool connectWiFi(const char *ssid, const char *password, const char *hostname, b
     delay(1000);
     if (!MDNS.begin(hostname))
     {
-        Serial.println(F("Error setting up MDNS responder!"));
+        LOG_PRINTLN(F("Error setting up MDNS responder!"));
     }
     DEBUG_PRINTLN(F("mDNS responder started"));
 

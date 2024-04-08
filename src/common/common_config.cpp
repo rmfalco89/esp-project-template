@@ -1,11 +1,11 @@
-#include "globals.h"
+#include "common/globals.h"
+#include "common/version.h"
 
 // Firmware
-const char *SW_VERSION = "0.1.0";
 const char *BINARY_NAME = "esp32devkitc.bin";
 
 // GitHub
-const char *releaseRepo = "rmfalco89/esp32-project-template";
+const char *releaseRepo = "rmfalco89/sump_pump-control";
 
 // Watchdog
 const int watchdogTimeout_s = 30;

@@ -1,17 +1,20 @@
 #ifndef SERVER_HANDLER_H
 #define SERVER_HANDLER_H
 
+#include <ESPAsyncWebServer.h>
+
 void setupServer(bool config_mode);
 void loopServer();
 
 // Routes go here
-void routeHome();
-void rootReboot();
-void routeConfigure();
-void routeSaveConfiguration();
-void routeInvaldateConfig();
-void routeCheckUpdate();
-void routeUploadFirmware();
-void routeUploadFirmwareSave();
+void rootReboot(AsyncWebServerRequest *request);
+void routeConfigure(AsyncWebServerRequest *request);
+void routeSaveConfiguration(AsyncWebServerRequest *request);
+void routeInvaldateConfig(AsyncWebServerRequest *request);
+void routeCheckUpdate(AsyncWebServerRequest *request);
+void routeLogsStream(AsyncWebServerRequest *request);
+
+void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type,
+             void *arg, uint8_t *data, size_t len);
 
 #endif // SERVER_HANDLER_H

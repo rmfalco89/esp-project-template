@@ -2,7 +2,8 @@
 #define OTA_HANDLER_H
 
 #include <Arduino.h>
-#include <WebServer.h>
+#include <map>
+#include <ESPAsyncWebServer.h>
 
 void otaSetup(const char *, const char *, const char *, const char *);
 
@@ -22,8 +23,8 @@ public:
     ESP32_GithubOtaUpdate(const char *, const char *, const char *, const char *);
     void checkForSoftwareUpdate();
     void upgradeSoftware();
-    void upgradeSoftware(const char *updateURL);
-    void registerFirmwareUploadRoutes(WebServer *server);
+    void upgradeSoftware(const char *);
+    void registerFirmwareUploadRoutes(AsyncWebServer *, std::map<String, String> * = nullptr);
 };
 
 #endif

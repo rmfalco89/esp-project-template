@@ -1,50 +1,34 @@
 #include "Arduino.h"
 
 #include "server_handler.h"
-#include "globals.h"
+#include "common/globals.h"
 
 #include "device_configuration.h"
 #include "wifi_handler.h"
 
-// Routes go here
-void routeHome()
-{
-    DEBUG_PRINTLN("routeHome");
-
-    String currentConfigStr = "\n\n---\nSoftware version: " + String(SW_VERSION);
-
-    if (currentDeviceConfiguration != nullptr)
-        currentConfigStr += currentDeviceConfiguration->toStr();
-    else
-        currentConfigStr += F("No valid configuration was found.");
-
-    currentConfigStr += "\n\n---\nJust restarted: " + String(justRestarted ? "yes" : "no");
-
-    webServer->send(200, "text/plain", currentConfigStr);
-}
-void rootReboot()
+void rootReboot(AsyncWebServerRequest *request)
 {
     DEBUG_PRINTLN("rootReboot");
 
-    webServer->send(200, "text/plain", F("Rebooting now."));
+    request->send(200, "text/plain", F("Rebooting now."));
     delay(3000);
     ESP.restart();
 }
 
-void routeInvaldateConfig()
+void routeInvaldateConfig(AsyncWebServerRequest *request)
 {
     DEBUG_PRINTLN("routeInvaldateConfig");
 
     invalidateDeviceConfigurationOnEeprom();
-    webServer->send(200, "text/plain", F("Configuration voided. Configure at /configure. Rebooting now."));
+    request->send(200, "text/plain", F("Configuration voided. Configure at /configure. Rebooting now."));
     ESP.restart();
 }
 
-void routeCheckUpdate()
+void routeCheckUpdate(AsyncWebServerRequest *request)
 {
     DEBUG_PRINTLN("routeCheckUpdate");
 
-    webServer->send(200, "text/html", F("Checking for new firmware on github. This might take a few seconds..."));
+    request->send(200, "text/html", F("Checking for new firmware on github. This might take a few seconds..."));
     updater->upgradeSoftware();
 }
 
@@ -83,21 +67,22 @@ String formatDeviceConfigurationHtmlTemplate()
 <input type=\"submit\" value=\"Save\"></form></body></html>");
 }
 
-void routeConfigure()
+void routeConfigure(AsyncWebServerRequest *request)
 {
     DEBUG_PRINTLN("routeConfigure");
-    webServer->send(200, "text/html", formatDeviceConfigurationHtmlTemplate());
+    request->send(200, "text/html", formatDeviceConfigurationHtmlTemplate());
 }
 
-void routeSaveConfiguration()
+void routeSaveConfiguration(AsyncWebServerRequest *request)
 {
+    Serial.print("HEREHEHERE");
     DEBUG_PRINTLN("routeSaveConfiguration");
 
-    String ssid = webServer->arg("ssid");
-    String password = webServer->arg("password");
-    String hostName = webServer->arg("hostname");
-    String deviceName = webServer->arg("device_name");
-    String authToken = webServer->arg("auth_token");
+    String ssid = request->arg("ssid");
+    String password = request->arg("password");
+    String hostName = request->arg("hostname");
+    String deviceName = request->arg("device_name");
+    String authToken = request->arg("auth_token");
 
     if (hostName == "")
         hostName = configModeHostname;
@@ -105,12 +90,70 @@ void routeSaveConfiguration()
     DeviceConfiguration *newConfig = new DeviceConfiguration(ssid.c_str(), password.c_str(), hostName.c_str(), deviceName.c_str(), authToken.c_str());
 
     // Send a response to the client
-    webServer->send(200, "text/plain", F("Configuration received. Will attempt connection to WiFi with provided credentials. Will save configuration if successful."));
+    request->send(200, "text/plain", F("Configuration received. Will attempt connection to WiFi with provided credentials. Will save configuration if successful."));
     delay(250);
 
     currentDeviceConfiguration = newConfig;
     saveDeviceConfigurationToEeprom();
     setupWifi(false);
-    Serial.println(F("Configuration accepted. Rebooting."));
+    LOG_PRINTLN(F("Configuration accepted. Rebooting."));
     ESP.restart(); // Note: will not reach this point if connection to Wifi is unsuccessful
+}
+
+void routeLogsStream(AsyncWebServerRequest *request)
+{
+    DEBUG_PRINTLN("routeLogsStream");
+    String html = "<!DOCTYPE html><html><head><script>"
+                  "var ws = new WebSocket('ws://' + window.location.hostname + ':80/wsLogs');"
+                  "ws.onmessage = function(event) {"
+                  "  var container = document.getElementById('logContainer');"
+                  "  var message = document.createElement('p');"
+                  "  message.textContent = event.data;"
+                  "  container.appendChild(message);" // Append the new message at the bottom
+                  "};"
+                  "</script></head><body>"
+                  "<h1>Log Messages</h1>"
+                  "<div id='logContainer'></div>" // Container for log messages
+                  "</body></html>";
+    request->send(200, "text/html", html);
+}
+
+AsyncWebSocket wsLogs("/wsLogs");
+void handleWebSocketMessage(void *arg, uint8_t *data, size_t len)
+{
+    AwsFrameInfo *info = (AwsFrameInfo *)arg;
+    if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT)
+    {
+        data[len] = 0; // Null-terminate the data (if text)
+        String message = "WebSocket message: " + String((char *)data);
+        LOG_PRINTLN(message);
+    }
+}
+
+void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type,
+             void *arg, uint8_t *data, size_t len)
+{
+    switch (type)
+    {
+    case WS_EVT_CONNECT:
+        LOG_PRINTLN("WebSocket " + String(server->url()) + " client #" + String(client->id()) +
+                    " connected from " + client->remoteIP().toString());
+        break;
+    case WS_EVT_DISCONNECT:
+        LOG_PRINTLN("WebSocket " + String(server->url()) + " client #" + String(client->id()) +
+                    " disconnected");
+        break;
+    case WS_EVT_DATA:
+        handleWebSocketMessage(arg, data, len);
+        break;
+    default:
+        break;
+    }
+}
+
+void sendToLogsWebsocket(const String &message)
+{
+    // Check if there are WebSocket clients connected
+    if (wsLogs.count() > 0)
+        wsLogs.textAll(message); // Send message to all connected log WebSocket clients
 }

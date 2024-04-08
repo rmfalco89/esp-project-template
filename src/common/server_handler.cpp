@@ -1,35 +1,54 @@
 #include "server_handler.h"
 
-#include <WebServer.h>
 #include <HTTPClient.h>
 
-WebServer *webServer;
+#include "common/globals.h"
+
+AsyncWebServer *webServer;
+std::map<String, String> routeDescriptions;
 
 void setupServer(bool config_mode)
 {
-    webServer = new WebServer(80);
+    webServer = new AsyncWebServer(80);
 
     // Default routes
-    webServer->on("/", HTTP_GET, routeHome);
-    webServer->on("/reboot", HTTP_GET, rootReboot);
-    webServer->on("/configure", HTTP_GET, routeConfigure);
-    webServer->on("/saveConfiguration", HTTP_POST, routeSaveConfiguration);
-    webServer->on("/invalidateConfig", HTTP_GET, routeInvaldateConfig);
-    webServer->on("/checkForUpdates", HTTP_GET, routeCheckUpdate);
-    // webServer->on("/uploadFirmware", HTTP_GET, routeUploadFirmware);
-    // webServer->on("/firmwareUploadSave", HTTP_POST, routeUploadFirmwareSave);
+    webServer->on("/reboot", HTTP_GET, [](AsyncWebServerRequest *request)
+                  { rootReboot(request); });
+    routeDescriptions["/reboot"] = "";
+
+    webServer->on("/configure", HTTP_GET, [](AsyncWebServerRequest *request)
+                  { routeConfigure(request); });
+    routeDescriptions["/configure"] = "Device configuration (wifi, hostname, github token)";
+
+    webServer->on("/saveConfiguration", HTTP_POST, [](AsyncWebServerRequest *request)
+                  { routeSaveConfiguration(request); });
+
+    webServer->on("/invalidateConfig", HTTP_GET, [](AsyncWebServerRequest *request)
+                  { routeInvaldateConfig(request); });
+    routeDescriptions["/invalidateConfig"] = "";
+
+    webServer->on("/checkForUpdates", HTTP_GET, [](AsyncWebServerRequest *request)
+                  { routeCheckUpdate(request); });
+    routeDescriptions["/checkForUpdates"] = "Checks for newer firmware on github";
+
+    webServer->addHandler(&wsLogs);
+    webServer->on("/logsStream", HTTP_GET, [](AsyncWebServerRequest *request)
+                  { routeLogsStream(request); });
+    routeDescriptions["/logsStream"] = "Get a logs streaming for remote debugging";
+
 
     // Add routes here
-    if (!config_mode) {
-        // webServer->on("/routePath", HTTP_MODE, func);
-    }
+    // if (!config_mode)
+    // {
+    //     webServer->on("/routePath", HTTP_MODE, func);
+    // }
 
     // Start the server
     webServer->begin();
 }
 
-
 void loopServer()
 {
-    webServer->handleClient(); // Handle client requests
+    // Not needed for AsyncWebServer
+    // webServer->handleClient(); // Handle client requests
 }

@@ -5,6 +5,7 @@
 #include <HTTPUpdate.h>
 #include <WiFi.h>
 
+#ifndef DEBUG_PRINT
 #define DEBUG
 #ifdef DEBUG
 #define DEBUG_PRINT(str)   \
@@ -18,7 +19,8 @@
 #else
 #define DEBUG_PRINT(str)
 #define DEBUG_PRINTLN(str)
-#endif
+#endif // #ifdef DEBUG
+#endif // #ifndef DEBUG_PRINT
 
 uint32_t checkForSoftwareUpdateMillis = 60 * 60 * 1000; // check for software update every 1 hour
 uint64_t lastCheckForUpdateMillis = 0;
@@ -146,7 +148,7 @@ void ESP32_GithubOtaUpdate::upgradeSoftware(const char *updateURL)
     }
 
     WiFiClientSecure secureClient;
-    secureClient.setInsecure(); // Skip certificate verification
+    secureClient.setInsecure();                                  // Skip certificate verification
     httpUpdate.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS); // for some reason github redirects all the time (throws a 302)
 
     t_httpUpdate_return ret = httpUpdate.update(secureClient, updateURL, currentVersion);
@@ -172,59 +174,52 @@ void ESP32_GithubOtaUpdate::checkForSoftwareUpdate()
     }
 }
 
-void ESP32_GithubOtaUpdate::registerFirmwareUploadRoutes(WebServer *webServer)
-{
+void ESP32_GithubOtaUpdate::registerFirmwareUploadRoutes(AsyncWebServer *webServer, std::map<String, String> *routeDescriptions) {
     if (!webServer)
-        return; // Safety check
+        return;
 
-    // Handler for the file upload form
-    webServer->on("/uploadFirmware", HTTP_GET, [webServer]()
-                  {
-        DEBUG_PRINTLN("routeUploadFirmware");
-        String html = "<!DOCTYPE html><html><head><title>Upload Firmware</title></head><body>"
-                      "<form method='post' action='/firmwareUploadSave' enctype='multipart/form-data'>"
-                      "<input type='file' name='firmware'>"
-                      "<input type='submit' value='Upload Firmware'>"
-                      "</form>"
-                      "</body></html>";
-        webServer->send(200, "text/html", html); });
+    webServer->on("/uploadFirmware", HTTP_GET, [webServer](AsyncWebServerRequest *request) {
+        request->send(200, "text/html", "<form method='POST' action='/firmwareUploadSave' enctype='multipart/form-data'>"
+                                         "<input type='file' name='firmware'>"
+                                         "<input type='submit' value='Upload Firmware'>"
+                                         "</form>");
+    });
 
-    // Handler for the actual file upload
-    webServer->on(
-        "/firmwareUploadSave", HTTP_POST, [webServer]()
-        { webServer->send(200, "text/plain", "Upload complete. Device will restart."); },
-        [webServer]()
-        {
-            DEBUG_PRINTLN("routeFirmwareUploadSave");
-            HTTPUpload &upload = webServer->upload();
-            if (upload.status == UPLOAD_FILE_START)
-            {
-                Serial.printf("Update: %s\n", upload.filename.c_str());
-                // Start with max available size
-                if (!Update.begin(UPDATE_SIZE_UNKNOWN))
-                {
-                    Update.printError(Serial);
-                }
+    if (routeDescriptions != nullptr) {
+        routeDescriptions->insert(std::make_pair("/uploadFirmware", "Upload firmware directly from the browser"));
+    }
+
+    webServer->on("/firmwareUploadSave", HTTP_POST, [webServer](AsyncWebServerRequest *request) {
+        // Placeholder for final response to the client, actual response will be sent in the upload handler
+    },
+    [webServer](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+        if (!index) {
+            Serial.printf("Update Start: %s\n", filename.c_str());
+            if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+                Update.printError(Serial);
+                request->send(500, "text/plain", "Update failed at start");
+                delay(2000);
+                return;
             }
-            else if (upload.status == UPLOAD_FILE_WRITE)
-            {
-                // Write the received bytes to flash
-                if (Update.write(upload.buf, upload.currentSize) != upload.currentSize)
-                {
-                    Update.printError(Serial);
-                }
+        }
+
+        if (Update.write(data, len) != len) {
+            Update.printError(Serial);
+            request->send(500, "text/plain", "Update failed during write");
+            delay(2000);
+            return;
+        }
+
+        if (final) {
+            if (Update.end(true)) {
+                Serial.printf("Update Success: %uB\n", index + len);
+                request->send(200, "text/plain", "Upload complete, device will restart.");
+                delay(3000); // Short delay to ensure the response is sent before reboot
+                ESP.restart();
+            } else {
+                Update.printError(Serial);
+                request->send(500, "text/plain", "Update failed at end");
             }
-            else if (upload.status == UPLOAD_FILE_END)
-            {
-                if (Update.end(true))
-                { // True to set the size to the current progress
-                    Serial.printf("Update Success: %u\nRebooting...\n", upload.totalSize);
-                    ESP.restart();
-                }
-                else
-                {
-                    Update.printError(Serial);
-                }
-            }
-        });
+        }
+    });
 }

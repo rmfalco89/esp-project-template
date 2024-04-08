@@ -2,11 +2,12 @@
 #include <esp_task_wdt.h>
 #include <esp_sleep.h>
 
-#include "device_configuration.h"
-#include "globals.h"
-#include "ota_handler.h"
-#include "server_handler.h"
-#include "wifi_handler.h"
+#include "common/device_configuration.h"
+#include "common/eeprom_utils.tpp"
+#include "common/globals.h"
+#include "common/ota_handler.h"
+#include "common/server_handler.h"
+#include "common/wifi_handler.h"
 
 bool configMode = false;
 bool justRestarted = true;
@@ -20,7 +21,11 @@ void common_setup()
     esp_task_wdt_add(NULL);                     // Passing NULL adds the current task (loop task for Arduino)
 
     Serial.begin(115200);
-    Serial.println(F("==============\n== Welcome! ==\n=============="));
+    LOG_PRINTLN(F("==============\n== Welcome! ==\n=============="));
+
+    // init EEPROM addresses
+    JUST_RESTARTED_EEPROM_ADDR = 0;
+    DEVICE_CONFIGURATION_EEPROM_ADDR = nextEepromSlot<JustRestarted>(JUST_RESTARTED_EEPROM_ADDR);
 
     // Check whether it's a quick restart or the device config is not valid
     readDeviceConfigurationFromEeprom();
@@ -40,12 +45,12 @@ void common_setup()
 
     // OTA Updater
     updater = new ESP32_GithubOtaUpdate(SW_VERSION, BINARY_NAME, releaseRepo, currentDeviceConfiguration->githubAuthToken);
-    updater->registerFirmwareUploadRoutes(webServer);
+    updater->registerFirmwareUploadRoutes(webServer, &routeDescriptions);
     if (!configMode)
         updater->upgradeSoftware(); // Check and perform upgrade on startup
 
-    Serial.println(SW_VERSION);
-    Serial.println("Common setup complete");
+    LOG_PRINTLN("SW_VERSION: " + String(SW_VERSION));
+    LOG_PRINTLN("Common setup complete");
 }
 
 void common_loop()
@@ -66,8 +71,11 @@ void common_loop()
     if (configMode && millis() - configModeLastCheckMillis > configModeCheckEveryMillis)
     {
         configModeLastCheckMillis = millis();
-        if (readDeviceConfigurationFromEeprom())
-            configMode = false;
+        if (readDeviceConfigurationFromEeprom()) {
+            LOG_PRINTLN("Got valid configuration and connected to wifi. Restarting.");
+            delay(50);
+            ESP.restart();
+        }
     }
 
     // - wifi and server

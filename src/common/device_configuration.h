@@ -4,26 +4,24 @@
 #include "utils.h"
 
 /*
-  Data Structure Alignment: 
-  When structures are saved to and read from EEPROM, 
-  padding added by the compiler for alignment can cause issues. 
+  Data Structure Alignment:
+  When structures are saved to and read from EEPROM,
+  padding added by the compiler for alignment can cause issues.
   Using #pragma pack(push, 1) before your structs and
-  #pragma pack(pop) after can ensure no extra padding is added, 
+  #pragma pack(pop) after can ensure no extra padding is added,
   making the size predictable.
 */
 #pragma pack(push, 1)
 
-using checksum_type = uint32_t;
-
 /**
- * Define structs that will be stored in the EEPROM
+ * These structs are stored in the EEPROM
  */
-
 struct JustRestarted
 {
   bool justRestarted;
 
-  JustRestarted() {} // needed to allocate space when reading from eeprom
+  // needed to allocate space when reading from eeprom for permanent configuration
+  JustRestarted() {}
 
   JustRestarted(bool justRestarted_)
   {
@@ -67,14 +65,10 @@ struct DeviceConfiguration
     return text;
   }
 
-  void printToSerial()
-  {
-    Serial.println(toStr());
-  }
+  void printToSerial();
 };
 
-const int JUST_RESTARTED_EEPROM_ADDR = 0;
-const int DEVICE_CONFIGURATION_EEPROM_ADDR = sizeof(JustRestarted) + sizeof(checksum_type) + 2;
+#pragma pack(pop)
 
 bool readDeviceConfigurationFromEeprom();
 void saveDeviceConfigurationToEeprom();
@@ -83,5 +77,4 @@ void invalidateDeviceConfigurationOnEeprom();
 bool readJustRestartedFromEeprom();
 void saveJustRestartedToEeprom(bool is_quick_restart);
 
-#pragma pack(pop)
 #endif

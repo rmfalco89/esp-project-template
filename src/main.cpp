@@ -1,19 +1,37 @@
-#include <Arduino.h>
+/* Project name: <project name>
+  <project description>
+*/
+
+#include "Arduino.h"
 
 #include "common/common_main.h"
+#include "common/eeprom_utils.tpp"
 #include "common/globals.h"
 
-void setup()
-{
-  common_setup();
+#include "globals.h"
+#include "serverHandles.h"
 
-  webServer->on("/dynamicRoute", HTTP_GET, []()
-                { webServer->send(200, "text/plain", "This is a dynamically added route."); });
+/** Wiring **/
+// <consider writing here the wiring scheme
+void setup(void)
+{
+    common_setup();
+
+    // project-specific handles, if any
+    // addServerHandles();
+
+    // project-specific eeprom config, if any
+    // readConfigFromEeprom();
+
+    // Init components
+
+    LOG_PRINTLN("Full setup complete");
 }
 
-void loop()
+void loop(void)
 {
-  common_loop();
-  // Your loop code here
-  delay(1000);
+    common_loop();
+
+    // delay(1000);
+    // LOG_PRINTLN("Loop cycle complete");
 }

@@ -7,7 +7,7 @@
 
 void otaSetup(const char *, const char *, const char *, const char *);
 
-class ESP32_GithubOtaUpdate
+class ESPGithubOtaUpdate
 {
 private:
     bool isInited = false;
@@ -20,7 +20,7 @@ private:
     bool isNewerVersionAvailable(char *&latestVersion, char *&updateURL);
 
 public:
-    ESP32_GithubOtaUpdate(const char *, const char *, const char *, const char *);
+    ESPGithubOtaUpdate(const char *, const char *, const char *, const char *);
     void checkForSoftwareUpdate();
     void upgradeSoftware();
     void upgradeSoftware(const char *);

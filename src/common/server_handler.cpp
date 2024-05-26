@@ -1,6 +1,11 @@
 #include "server_handler.h"
 
+#ifdef ESP32
 #include <HTTPClient.h>
+#elif defined(ESP8266)
+#include <ESP8266HTTPClient.h>
+#include <ESP8266WiFi.h>
+#endif
 
 #include "common/globals.h"
 
@@ -16,9 +21,9 @@ void setupServer(bool config_mode)
                   { rootReboot(request); });
     routeDescriptions["/reboot"] = "";
 
-    webServer->on("/configure", HTTP_GET, [](AsyncWebServerRequest *request)
+    webServer->on("/configureDevice", HTTP_GET, [](AsyncWebServerRequest *request)
                   { routeConfigure(request); });
-    routeDescriptions["/configure"] = "Device configuration (wifi, hostname, github token)";
+    routeDescriptions["/configureDevice"] = "Device configuration (wifi, hostname, github token)";
 
     webServer->on("/saveConfiguration", HTTP_POST, [](AsyncWebServerRequest *request)
                   { routeSaveConfiguration(request); });
@@ -35,7 +40,6 @@ void setupServer(bool config_mode)
     webServer->on("/logsStream", HTTP_GET, [](AsyncWebServerRequest *request)
                   { routeLogsStream(request); });
     routeDescriptions["/logsStream"] = "Get a logs streaming for remote debugging";
-
 
     // Add routes here
     // if (!config_mode)

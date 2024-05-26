@@ -16,16 +16,16 @@
 /**
  * These structs are stored in the EEPROM
  */
-struct JustRestarted
+struct QuickRestarts
 {
-  bool justRestarted;
+  uint8_t consecutiveQuickRestartsCount;
 
   // needed to allocate space when reading from eeprom for permanent configuration
-  JustRestarted() {}
+  QuickRestarts() {}
 
-  JustRestarted(bool justRestarted_)
+  QuickRestarts(uint8_t quickRestartsCount)
   {
-    justRestarted = justRestarted_;
+    consecutiveQuickRestartsCount = quickRestartsCount;
   }
 };
 
@@ -50,7 +50,7 @@ struct DeviceConfiguration
 
   String toStr() const
   {
-    String text = "## Device config: \n";
+    String text = "###\n";
     text += "\nSsid: '";
     text += String(ssid);
     text += "'\nPass: '";
@@ -61,7 +61,7 @@ struct DeviceConfiguration
     text += String(deviceName);
     text += "'\nGithub token: '";
     text += stringMask(String(githubAuthToken), '*');
-    text += "'\n----\n";
+    text += "'\n###\n";
     return text;
   }
 
@@ -74,7 +74,7 @@ bool readDeviceConfigurationFromEeprom();
 void saveDeviceConfigurationToEeprom();
 void invalidateDeviceConfigurationOnEeprom();
 
-bool readJustRestartedFromEeprom();
-void saveJustRestartedToEeprom(bool is_quick_restart);
+uint8_t readQuickRestartsFromEeprom();
+void saveQuickRestartsToEeprom(bool is_quick_restart);
 
 #endif

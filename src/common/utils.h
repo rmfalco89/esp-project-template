@@ -5,4 +5,5 @@
 
 String stringMask(const String &str, char mask);
 String getWifiStrength();
+String millisToTimeStr(uint64_t);
 #endif // UTILS_H

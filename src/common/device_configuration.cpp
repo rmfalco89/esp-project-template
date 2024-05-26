@@ -44,23 +44,25 @@ void invalidateDeviceConfigurationOnEeprom()
     invalidateEepromData<DeviceConfiguration>(DEVICE_CONFIGURATION_EEPROM_ADDR);
 }
 
-bool readJustRestartedFromEeprom()
+uint8_t readQuickRestartsFromEeprom()
 {
     DEBUG_PRINTLN(F("EEPROM: just restarted: read...: "));
-    JustRestarted *eepromConfig = readDataFromEeprom<JustRestarted>(JUST_RESTARTED_EEPROM_ADDR);
+    QuickRestarts *eepromConfig = readDataFromEeprom<QuickRestarts>(JUST_RESTARTED_EEPROM_ADDR);
     if (eepromConfig == nullptr)
     {
         LOG_PRINTLN(F(">>WARNING: got invalid quickRestart info from EEPROM"));
-        return false;
+        return 255;
     }
-    DEBUG_PRINTLN(String(eepromConfig->justRestarted ? "true" : "false"));
-    return eepromConfig->justRestarted;
+    DEBUG_PRINTLN(eepromConfig->consecutiveQuickRestartsCount == 0 ? "Not a quick restart!" : String(eepromConfig->consecutiveQuickRestartsCount));
+    return eepromConfig->consecutiveQuickRestartsCount;
 }
 
-void saveJustRestartedToEeprom(bool is_quick_restart)
+void saveQuickRestartsToEeprom(bool isQuickRestart)
 {
-    DEBUG_PRINTLN(String("EEPROM: just restarted: write: ") + String(is_quick_restart ? "true" : "false"));
-    JustRestarted qr(is_quick_restart);
-    writeDataToEeprom<JustRestarted>(JUST_RESTARTED_EEPROM_ADDR, &qr);
+    uint8_t restartsCount = !isQuickRestart ? 0 : readQuickRestartsFromEeprom() + 1;
+
+    DEBUG_PRINTLN("EEPROM: just restarted: write: count: " + String(restartsCount));
+    QuickRestarts qr(restartsCount);
+    writeDataToEeprom<QuickRestarts>(JUST_RESTARTED_EEPROM_ADDR, &qr);
     DEBUG_PRINTLN(F(" ..done"));
 }

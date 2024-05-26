@@ -3,7 +3,9 @@
 
 #include "ESPAsyncWebServer.h"
 
-void routeHomeComplete(AsyncWebServerRequest *request);
 void addServerHandles();
+
+void routeHomeComplete(AsyncWebServerRequest *request);
+void routeConfigureBoard(AsyncWebServerRequest *request);
 
 #endif // SERVER_HANDLES_H

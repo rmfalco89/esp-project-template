@@ -1,8 +1,13 @@
 #include "wifi_handler.h"
 
 #include <Arduino.h>
+#ifdef ESP32
 #include <WiFi.h>
 #include <ESPmDNS.h>
+#elif defined(ESP8266)
+#include <ESP8266WiFi.h>
+#include <ESP8266mDNS.h>
+#endif
 
 #include "common/globals.h"
 #include "device_configuration.h"
@@ -16,18 +21,25 @@ bool connectWiFi(const char *ssid, const char *password, const char *hostname, b
 {
     bool connected = false;
     uint8_t numRetries = 5;
+    IPAddress ipAddress = IPAddress((uint32_t)0);
+
+#ifdef ESP8266
+    WiFi.setSleepMode(WIFI_NONE_SLEEP);
+#endif
 
     if (configMode)
     {
         WiFi.mode(WIFI_AP);
         connected = WiFi.softAP(ssid, password);
+        ipAddress = WiFi.softAPIP();
     }
     else
     {
-        while (!connected && numRetries-- >= 0)
+        while (!connected && numRetries-- > 0)
         {
             WiFi.mode(WIFI_STA);
-            WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, dns);
+            // Uncomment to set dns
+            // WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, dns);
             WiFi.begin(ssid, password);
             DEBUG_PRINT(F("Connecting to WiFi..."));
             uint64_t connectionAttemptBeginMillis = millis();
@@ -37,20 +49,21 @@ bool connectWiFi(const char *ssid, const char *password, const char *hostname, b
                 delay(500);
                 DEBUG_PRINT(F("."));
                 if (WiFi.status() == WL_CONNECTED)
+                {
                     connected = true;
-                
+                    ipAddress = WiFi.localIP();
+                }
             }
             if (!connected)
-                DEBUG_PRINT(F("\nUnable to connect. Trying again."));
+                DEBUG_PRINTLN(F("\nUnable to connect. Trying again."));
         }
         if (!connected)
         {
             DEBUG_PRINTLN(F("Connection to WiFi unsuccessful. Entering config mode"));
-            saveJustRestartedToEeprom(true); // use the just restarted logic to enter in config mode
+            saveQuickRestartsToEeprom(true); // use the just restarted logic to enter in config mode
             ESP.restart();
         }
-        DEBUG_PRINT(F("\nConnected to WiFi with IP address "));
-        DEBUG_PRINTLN(WiFi.localIP());
+        DEBUG_PRINTLN("\nConnected to WiFi with IP address " + ipAddress.toString());
     }
 
     // Initialize mDNS
@@ -60,16 +73,16 @@ bool connectWiFi(const char *ssid, const char *password, const char *hostname, b
     {
         LOG_PRINTLN(F("Error setting up MDNS responder!"));
     }
-    DEBUG_PRINTLN(F("mDNS responder started"));
+    DEBUG_PRINTLN("mDNS responder started with hostname " + String(hostname));
 
     return true;
 }
 
 void setupWifi(bool configMode)
 {
-    DEBUG_PRINT(F("Setting up WiFi in "));
-    DEBUG_PRINT(configMode ? F("AP") : F("STA"));
-    DEBUG_PRINTLN(F(" mode."));
+    LOG_PRINT(F("Setting up WiFi in "));
+    LOG_PRINT(configMode ? F("AP") : F("STA"));
+    LOG_PRINTLN(F(" mode."));
     configMode_ = configMode;
     if (configMode)
     {
@@ -96,15 +109,24 @@ void setupWifi(bool configMode)
 
 void loopWiFi()
 {
+#ifdef ESP8266
+    MDNS.update();
+#endif
+
     if (configMode_)
         return;
 
-    // Check WiFi is still connected, otherwise reconnect
+    // Make sure WiFi is connected, reconnect if necessary
     if (millis() - lastCheckedMillis >= wifiConnectionStatusCheckMillis)
     {
         lastCheckedMillis = millis();
-        if (WiFi.status() != WL_CONNECTED)
+        WiFiClient client;
+        const char *host = "www.google.com";
+        const int port = 80; // HTTP port
+
+        if (WiFi.status() != WL_CONNECTED || !client.connect(host, port))
         {
+            LOG_PRINTLN("Wifi disconnected");
             setupWifi(configMode_);
         }
     }

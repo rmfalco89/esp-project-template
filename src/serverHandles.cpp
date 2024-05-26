@@ -1,8 +1,13 @@
+#ifdef ESP32
 #include <HTTPClient.h>
+#elif defined(ESP8266)
+#include <ESP8266HTTPClient.h>
+#endif
 
-#include "common/globals.h"
+
 #include "globals.h"
 #include "common/utils.h"
+#include "serverHandles.h"
 
 void routeHomeComplete(AsyncWebServerRequest *request)
 {
@@ -11,12 +16,13 @@ void routeHomeComplete(AsyncWebServerRequest *request)
     // Software Version
     String currentConfigStr = "\n\n---\nSoftware version: " + String(SW_VERSION);
 
-    // Just restarted
-    currentConfigStr += "\n\n---\nJust restarted: " + String(justRestarted ? "yes" : "no");
+    // Quick restarts
+    currentConfigStr += "\n\n---\nQuick restarts count: " + String(quickRestartsCount);
 
     // Wifi signal strength
     String wifiStrength = getWifiStrength();
     currentConfigStr += "\n\n---\nWifi Signal strength: " + wifiStrength;
+    currentConfigStr += "\nHostname: " + String(currentDeviceConfiguration->hostname);
 
     // Current common configuration
     // currentConfigStr += "\n\n---\nDevice configuration:\n";
@@ -49,4 +55,26 @@ void addServerHandles()
     webServer->on("/", HTTP_GET, [](AsyncWebServerRequest *request)
                   { routeHomeComplete(request); });
     routeDescriptions["/"] = "";
+
+    webServer->on("/configure", HTTP_GET, [](AsyncWebServerRequest *request)
+                  { routeConfigureBoard(request); });
+    routeDescriptions["/configure"] = "Configure sump pump manager settings";
+}
+
+String formatConfigurationHtmlTemplate()
+{
+    String myConfig = String(systemConfiguration->myConfig);
+
+    return String("<!DOCTYPE html><html><head><meta charset='utf-8'><title>System Configuration</title></head><body>\
+<form method='post' action='/saveConfig'>\
+<label for='myConfig'>My config char:</label>\
+<input type='text' id='myConfig' name='myConfig' value='" +
+                  myConfig + "'><br><br>\
+<input type='submit' value='Save'></form></body></html>");
+}
+
+void routeConfigureBoard(AsyncWebServerRequest *request)
+{
+    DEBUG_PRINTLN("routeConfigureBoard")
+    request->send(200, "text/html", formatConfigurationHtmlTemplate());
 }

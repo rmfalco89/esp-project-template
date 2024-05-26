@@ -20,7 +20,7 @@ void routeInvaldateConfig(AsyncWebServerRequest *request)
     DEBUG_PRINTLN("routeInvaldateConfig");
 
     invalidateDeviceConfigurationOnEeprom();
-    request->send(200, "text/plain", F("Configuration voided. Configure at /configure. Rebooting now."));
+    request->send(200, "text/plain", F("Device configuration voided. Configure at /configureDevice. Rebooting now."));
     ESP.restart();
 }
 
@@ -96,25 +96,30 @@ void routeSaveConfiguration(AsyncWebServerRequest *request)
     currentDeviceConfiguration = newConfig;
     saveDeviceConfigurationToEeprom();
     setupWifi(false);
-    LOG_PRINTLN(F("Configuration accepted. Rebooting."));
+    LOG_PRINTLN(F("Configuration accepted. Setting quickRestart to 0 and Rebooting."));
+    saveQuickRestartsToEeprom(false);
+
     ESP.restart(); // Note: will not reach this point if connection to Wifi is unsuccessful
 }
 
 void routeLogsStream(AsyncWebServerRequest *request)
 {
     DEBUG_PRINTLN("routeLogsStream");
-    String html = "<!DOCTYPE html><html><head><script>"
-                  "var ws = new WebSocket('ws://' + window.location.hostname + ':80/wsLogs');"
-                  "ws.onmessage = function(event) {"
-                  "  var container = document.getElementById('logContainer');"
-                  "  var message = document.createElement('p');"
-                  "  message.textContent = event.data;"
-                  "  container.appendChild(message);" // Append the new message at the bottom
-                  "};"
-                  "</script></head><body>"
-                  "<h1>Log Messages</h1>"
-                  "<div id='logContainer'></div>" // Container for log messages
-                  "</body></html>";
+String html = R"(<!DOCTYPE html><html><head><script>
+var ws = new WebSocket('ws://' + window.location.hostname + ':80/wsLogs');
+ws.onmessage = function(event) {
+  var container = document.getElementById('logContainer');
+
+  var now = new Date();
+  var timestamp = now.getHours() + ':' + now.getMinutes() + ':' + now.getSeconds();
+  var newMessage = timestamp + " - " + event.data + "\n";
+  container.textContent = newMessage + container.textContent;
+};
+</script></head><body>
+<h1>Log Messages</h1>
+<pre id='logContainer'></pre>
+</body></html>
+)";
     request->send(200, "text/html", html);
 }
 

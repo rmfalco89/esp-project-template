@@ -11,6 +11,7 @@
 #include "common/eeprom_utils.tpp"
 #include "common/globals.h"
 #include "common/ota_handler.h"
+#include "common/power_monitor.h"
 #include "common/server_handler.h"
 #include "common/wifi_handler.h"
 
@@ -32,6 +33,9 @@ void commonSetup()
     ESP.wdtDisable();
     ESP.wdtEnable(WDTO_8S);
 #endif
+
+    checkResetCause();
+    logVCC();
 
     pinMode(integratedLEDPin, OUTPUT);
 
@@ -98,6 +102,9 @@ uint8_t commonLoop()
 #elif defined(ESP8266)
     ESP.wdtFeed();
 #endif
+
+    // Power Monitor
+    logVCC();
 
     // LED flash
     if (millis() - lastLedFlashMillis > ledFlashMinInterval)

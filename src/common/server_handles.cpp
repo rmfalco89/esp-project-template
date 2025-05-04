@@ -110,23 +110,115 @@ void routeSaveConfiguration(AsyncWebServerRequest *request)
 void routeLogsStream(AsyncWebServerRequest *request)
 {
     DEBUG_PRINTLN("routeLogsStream");
-    String html = R"(<!DOCTYPE html><html><head><script>
-var ws = new WebSocket('ws://' + window.location.hostname + ':80/wsLogs');
-ws.onmessage = function(event) {
-  var container = document.getElementById('logContainer');
+    String html = R"(<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background: #222;
+            color: #0f0;
+            font-family: monospace;
+        }
+        #logContainer {
+            height: 100vh; /* Full viewport height */
+            overflow-y: auto;
+            padding: 10px;
+            white-space: pre-wrap; /* Preserves new lines */
+        }
+    </style>
+    <script>
+        let wsLogs;
+        let reconnectDelay = 2000;
+        let lastMessageTime = Date.now();
+        let connectionTimeout = 5000;
 
-  var now = new Date();
-  var timestamp = now.getHours() + ':' + now.getMinutes() + ':' + now.getSeconds();
-  var newMessage = timestamp + " - " + event.data + "\n";
-  container.textContent = newMessage + container.textContent;
-};
-</script></head><body>
-<h1>Log Messages</h1>
-<pre id='logContainer'></pre>
-</body></html>
+        function connectLogsWebSocket() {
+            if (wsLogs) {
+                // Prevent double reconnection loops
+                wsLogs.onclose = null;
+                wsLogs.close();
+            }
+
+            wsLogs = new WebSocket('ws://' + window.location.hostname + ':80/wsLogs');
+
+            wsLogs.onopen = function () {
+                logEvent("-- - Reconnected to Logs - --");
+                lastMessageTime = Date.now();
+            };
+
+            wsLogs.onmessage = function (event) {
+                lastMessageTime = Date.now();
+                var container = document.getElementById('logContainer');
+
+                var now = new Date();
+                var timestamp = now.getHours().toString().padStart(2, '0') + ':' + 
+                                now.getMinutes().toString().padStart(2, '0') + ':' + 
+                                now.getSeconds().toString().padStart(2, '0');
+                
+                var newMessage = timestamp + " - " + event.data;
+                
+                var logEntry = document.createElement("div");
+                logEntry.textContent = newMessage;
+
+                var isNearBottom = (container.scrollHeight - container.scrollTop) <= (container.clientHeight + 50); 
+
+                container.appendChild(logEntry);
+
+                if (isNearBottom) {
+                    container.scrollTop = container.scrollHeight;
+                }
+            };
+
+            wsLogs.onclose = function () {
+                logEvent("#!# - Disconnected from Logs - #!#", true);
+                setTimeout(connectLogsWebSocket, reconnectDelay);
+            };
+        }
+
+        function checkWebSocketHealth() {
+            if (Date.now() - lastMessageTime > connectionTimeout) {
+                logEvent("_!_ - Connection Stale - _!_", true);
+                wsLogs.close();
+                setTimeout(connectLogsWebSocket, reconnectDelay);
+            }
+        }
+
+        function logEvent(message, isDisconnect = false) {
+            let container = document.getElementById('logContainer');
+            let now = new Date();
+            let timestamp = now.getHours().toString().padStart(2, '0') + ':' + 
+                            now.getMinutes().toString().padStart(2, '0') + ':' + 
+                            now.getSeconds().toString().padStart(2, '0');
+
+            if (isDisconnect) {
+                container.appendChild(document.createElement("br"));
+                container.appendChild(document.createElement("br"));
+            }
+
+            let logEntry = document.createElement("div");
+            logEntry.textContent = timestamp + " - " + message;
+            logEntry.style.fontWeight = "bold";
+
+            container.appendChild(logEntry);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Start WebSocket connection and periodic health check
+        connectLogsWebSocket();
+        setInterval(checkWebSocketHealth, 5000);
+    </script>
+</head>
+<body>
+    <pre id='logContainer'></pre>
+</body>
+</html>
 )";
     request->send(200, "text/html", html);
 }
+
 
 AsyncWebSocket wsLogs("/wsLogs");
 void handleWebSocketMessage(void *arg, uint8_t *data, size_t len)

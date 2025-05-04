@@ -50,7 +50,7 @@ struct DeviceConfiguration
 
   String toStr() const
   {
-    String text = "###\n";
+    String text = "###";
     text += "\nSsid: '";
     text += String(ssid);
     text += "'\nPass: '";

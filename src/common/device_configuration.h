@@ -1,0 +1,84 @@
+#ifndef DEVICE_CONFIGURATION_H
+#define DEVICE_CONFIGURATION_H
+
+#include "utils.h"
+
+/*
+  Data Structure Alignment:
+  When structures are saved to and read from EEPROM,
+  padding added by the compiler for alignment can cause issues.
+  Using #pragma pack(push, 1) before your structs and
+  #pragma pack(pop) after can ensure no extra padding is added,
+  making the size predictable.
+*/
+#pragma pack(push, 1)
+
+/**
+ * These structs are stored in the EEPROM
+ */
+struct QuickRestarts
+{
+  uint8_t consecutiveQuickRestartsCount;
+
+  // needed to allocate space when reading from eeprom for permanent configuration
+  QuickRestarts() {}
+
+  QuickRestarts(uint8_t quickRestartsCount)
+  {
+    consecutiveQuickRestartsCount = quickRestartsCount;
+  }
+};
+
+struct DeviceConfiguration
+{
+  char ssid[30];
+  char password[24];
+  char hostname[20];
+  char deviceName[20];
+  char githubAuthToken[100];
+  bool isAliveSignalEnabled;
+
+  DeviceConfiguration() : isAliveSignalEnabled(true) {}
+
+  DeviceConfiguration(const char *s, const char *pass, const char *hostn, const char *name, const char *githubT, bool aliveSignal = true)
+  {
+    strncpy(ssid, s, sizeof(ssid));
+    strncpy(password, pass, sizeof(password));
+    strncpy(hostname, hostn, sizeof(hostname));
+    strncpy(deviceName, name, sizeof(deviceName));
+    strncpy(githubAuthToken, githubT, sizeof(githubAuthToken));
+    isAliveSignalEnabled = aliveSignal;
+  }
+
+  String toStr() const
+  {
+    String text = "###";
+    text += "\nSsid: '";
+    text += String(ssid);
+    text += "'\nPass: '";
+    text += stringMask(String(password), '*');
+    text += "'\nHostname: '";
+    text += String(hostname);
+    text += "'\nDevice Name: '";
+    text += String(deviceName);
+    text += "'\nGithub token: '";
+    text += stringMask(String(githubAuthToken), '*');
+    text += "'\nAlive Signal: '";
+    text += isAliveSignalEnabled ? "Enabled" : "Disabled";
+    text += "'\n###\n";
+    return text;
+  }
+
+  void printToSerial();
+};
+
+#pragma pack(pop)
+
+bool readDeviceConfigurationFromEeprom();
+void saveDeviceConfigurationToEeprom();
+void invalidateDeviceConfigurationOnEeprom();
+
+uint8_t readQuickRestartsFromEeprom();
+void saveQuickRestartsToEeprom(bool is_quick_restart);
+
+#endif

@@ -322,26 +322,195 @@ Managed automatically by PlatformIO:
 
 This template is designed to be forked and customized for your projects.
 
-### Syncing Template Updates
+### Syncing Template Updates with Git Subtree
 
-If you want to pull template improvements into your project:
+This template uses **git subtree** to enable automatic syncing of the `src/common/` folder between your project and the template. This means you can:
+- Pull template improvements into your project with one command
+- Push your improvements back to the template to share with other projects
 
-1. **Setup git subtree** (one-time):
-   ```bash
-   cd /path/to/your-project
-   git remote add template /path/to/esp-project-template
-   git subtree add --prefix=src/common template main --squash
-   ```
+#### Initial Setup (One-Time)
 
-2. **Pull updates** (anytime):
-   ```bash
-   git subtree pull --prefix=src/common template main --squash
-   ```
+**When starting a new project from this template:**
 
-3. **Push improvements back** (if you improve common/ code):
-   ```bash
-   git subtree push --prefix=src/common template main
-   ```
+```bash
+# 1. Copy or clone the template
+cp -r /path/to/esp-project-template my-new-project
+cd my-new-project
+
+# 2. Initialize git (if not already done)
+git init
+git add .
+git commit -m "Initial commit from ESP template"
+
+# 3. Add template as a remote
+git remote add template /path/to/esp-project-template
+
+# 4. Verify remote was added
+git remote -v
+# Should show:
+# template  /path/to/esp-project-template (fetch)
+# template  /path/to/esp-project-template (push)
+```
+
+**Note:** If you copied the template (not cloned), the `src/common/` folder already exists, so you're ready to sync immediately. No need to run `git subtree add`.
+
+#### Pulling Template Updates
+
+**When to pull:** Pull updates from the template when you want the latest bug fixes and improvements.
+
+```bash
+cd /path/to/your-project
+git subtree pull --prefix=src/common template main --squash
+```
+
+**What this does:**
+- Fetches latest changes from the template repository
+- Merges them into your `src/common/` folder
+- Creates a single squashed commit
+- **Does NOT affect** your project-specific files (main.cpp, dht_handler.cpp, etc.)
+
+**Example output:**
+```
+Subtree is already at commit abc123
+```
+or
+```
+Merge made by the 'recursive' strategy.
+ src/common/wifi_handler.cpp | 3 +++
+ 1 file changed, 3 insertions(+)
+```
+
+#### Pushing Improvements Back
+
+**When to push:** When you fix a bug or add a feature to `src/common/` that should benefit other projects.
+
+```bash
+cd /path/to/your-project
+
+# 1. Make your changes in src/common/
+# 2. Commit normally
+git add src/common/wifi_handler.cpp
+git commit -m "Fix WiFi reconnection timeout"
+
+# 3. Push to template (one command!)
+git subtree push --prefix=src/common template main
+```
+
+**What this does:**
+- Extracts commits that touched `src/common/`
+- Pushes them to the template repository
+- Maintains git history
+- Other projects can then pull your improvements
+
+#### What Gets Synced vs. What Doesn't
+
+**✅ Synced via subtree (src/common/):**
+- `common_main.cpp/h` - Core setup and loop
+- `wifi_handler.cpp/h` - WiFi management
+- `server_handler.cpp/h` - Web server
+- `server_handles.cpp` - Built-in HTTP routes
+- `ota_handler.cpp/h` - OTA updates
+- `device_configuration.cpp/h` - Configuration structs
+- `eeprom_utils.tpp` - EEPROM utilities
+- `memory_stats.cpp/h` - RAM monitoring
+- `power_monitor.h` - VCC monitoring
+- `esp8266_ota_update.cpp/h` - ESP8266 OTA
+- `utils.cpp/h` - Utilities
+- `globals.h` - Common globals
+- `common_config.cpp` - Configuration constants
+- `version.h` - Software version
+
+**❌ Never synced (project-specific):**
+- `src/main.cpp` - Your project entry point
+- `src/globals.cpp/h` - Project-specific globals
+- `src/serverHandles.cpp/h` - Project-specific routes
+- `src/dht_handler.cpp` - Sensor handlers (example)
+- `src/system_config.cpp/h` - Project EEPROM config
+- `platformio.ini` - May have project dependencies
+- `README.md`, `.gitignore`, etc.
+
+#### Handling Merge Conflicts
+
+If you modified `src/common/` in your project AND the template was also updated, you may get conflicts:
+
+```bash
+# After git subtree pull
+# If conflicts occur:
+git status  # See conflicting files
+
+# Edit conflicting files manually
+# Look for <<<<<<< HEAD markers
+# Choose which changes to keep
+
+# After resolving:
+git add <resolved-files>
+git commit -m "Merge template updates, resolved conflicts"
+```
+
+#### Best Practices
+
+**Do pull regularly:**
+```bash
+# Before starting new features
+git subtree pull --prefix=src/common template main --squash
+```
+
+**Do push improvements:**
+```bash
+# After fixing bugs in common/ code
+git subtree push --prefix=src/common template main
+```
+
+**Don't modify common/ unnecessarily:**
+- Keep project-specific code in `src/` (not `src/common/`)
+- Only modify `src/common/` for true improvements
+
+**Do commit before pulling:**
+```bash
+# Always commit your work first
+git add .
+git commit -m "Work in progress"
+# Then pull
+git subtree pull --prefix=src/common template main --squash
+```
+
+#### Troubleshooting
+
+**"fatal: refusing to merge unrelated histories"**
+```bash
+# Add --allow-unrelated-histories flag
+git subtree pull --prefix=src/common template main --squash --allow-unrelated-histories
+```
+
+**"fatal: prefix 'src/common' already exists"**
+- This means `src/common/` already exists (good!)
+- Skip `git subtree add`, go straight to `git subtree pull`
+
+**"Working tree has modifications"**
+```bash
+# Commit your changes first
+git add .
+git commit -m "Save work before sync"
+# Then try again
+git subtree pull --prefix=src/common template main --squash
+```
+
+#### Quick Reference Card
+
+```bash
+# Setup (one-time)
+git remote add template /path/to/esp-project-template
+git remote -v  # Verify
+
+# Pull updates (regular)
+git subtree pull --prefix=src/common template main --squash
+
+# Push improvements (when you fix/improve common/ code)
+git subtree push --prefix=src/common template main
+
+# Check if template remote exists
+git remote -v | grep template
+```
 
 ## 📊 Version Management
 

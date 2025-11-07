@@ -3,7 +3,7 @@
 
 // LED
 #ifdef ESP32
-const uint8_t integratedLEDPin = 1;
+const uint8_t integratedLEDPin = 2; // NodeMCU-32S has built-in LED on GPIO2
 #elif defined(ESP8266)
 const uint8_t integratedLEDPin = 2;
 #endif
@@ -16,12 +16,12 @@ const char *BINARY_NAME = "esp32devkitc.bin";
 const char *releaseRepo = "rmfalco89/sump_pump-control";
 
 // Watchdog -> must be less than quick restart
-const int watchdogTimeout_s = 15; // 15s
+const int watchdogTimeout_s = 45; // 45s (increased for slow WiFi connections)
 
 
 // Quick Restart && Config Mode
 const uint8_t bootLoopModeMinCount = 5;
-const uint16_t quickRestarMaxDurationMillis = 20 * 1000;   // 30s
+const uint16_t quickRestarMaxDurationMillis = 50 * 1000;   // 50s (must be > watchdog)
 const uint32_t configModeCheckEveryMillis = 2 * 60 * 1000; // 2m
 uint8_t minQuickRestartCountToEnterConfigMode = 2;
 

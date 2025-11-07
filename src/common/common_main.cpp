@@ -68,9 +68,20 @@ void commonSetup()
     // Quick Restart
     saveQuickRestartsToEeprom(true);
 
+    // Feed watchdog before WiFi setup (can take 30+ seconds on slow networks)
+    LOG_PRINTLN("Feeding watchdog before WiFi connection...");
+#ifdef ESP32
+    esp_task_wdt_reset();
+#elif defined(ESP8266)
+    ESP.wdtFeed();
+#endif
+
     // Wifi setup
     if (!setupWifi())
+    {
         configMode = true;
+        setupWifi();  // Enter AP mode after failed STA connection
+    }
 
     // Server setup
     setupServer();
@@ -111,9 +122,14 @@ uint8_t commonLoop()
     bool aliveSignalEnabled = currentDeviceConfiguration && currentDeviceConfiguration->isAliveSignalEnabled;
     if (aliveSignalEnabled && millis() - lastLedFlashMillis > ledFlashMinInterval)
     {
-        Serial.print("Alive signal flash LED: ");
-        Serial.flush();
         lastLedFlashMillis = millis();
+
+#ifdef ESP32
+        // Flush any pending serial data BEFORE LED operations to prevent corruption
+        Serial.flush();
+#endif
+
+        // Flash LED
         for (int i = 0; i < 5; i++)
         {
             digitalWrite(integratedLEDPin, LOW);  // NodeMCU-32S: LOW = LED ON (inverted logic)
@@ -121,7 +137,15 @@ uint8_t commonLoop()
             digitalWrite(integratedLEDPin, HIGH); // NodeMCU-32S: HIGH = LED OFF (inverted logic)
             delay(40);
         }
-        Serial.println(" done");
+
+#ifdef ESP32
+        // Restore UART TX pin and wait for stabilization before any serial output
+        gpio_matrix_out(GPIO_NUM_1, U0TXD_OUT_IDX, false, false);
+        delay(1);  // 1ms delay for full UART stabilization
+#endif
+
+        // Print AFTER LED flash and UART restoration
+        Serial.println("Alive signal flash LED: done");
     }
 
     // - check if just restarted

@@ -24,6 +24,8 @@ bool connectWiFi(const char *ssid, const char *password, const char *hostname)
 
 #ifdef ESP8266
     WiFi.setSleepMode(WIFI_NONE_SLEEP);
+#elif defined(ESP32)
+    WiFi.setSleep(false);  // Disable WiFi sleep to reduce serial corruption
 #endif
 
     if (configMode)
@@ -58,14 +60,8 @@ bool connectWiFi(const char *ssid, const char *password, const char *hostname)
         }
         if (!connected)
         {
-            DEBUG_PRINTLN(F("Connection to WiFi unsuccessful. Entering config mode"));
-            configMode = true;
-            return setupWifi();
-            // this is actually very dangerous. Don't uncomment unless you know exactly what you
-            // are doing. And even then, remember that you did it once you hit unwanted behavior.
-            // saveQuickRestartsToEeprom(true); // use the just restarted logic to enter in config mode
-            // ESP.restart(); 
-                              
+            DEBUG_PRINTLN(F("Connection to WiFi unsuccessful."));
+            return false;  // Let the caller handle config mode transition
         }
         DEBUG_PRINTLN("\nConnected to WiFi with IP address " + ipAddress.toString());
     }

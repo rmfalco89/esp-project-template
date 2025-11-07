@@ -80,7 +80,6 @@ void routeConfigure(AsyncWebServerRequest *request)
 
 void routeSaveConfiguration(AsyncWebServerRequest *request)
 {
-    Serial.print("HEREHEHERE");
     DEBUG_PRINTLN("routeSaveConfiguration");
 
     String ssid = request->arg("ssid");
@@ -99,17 +98,28 @@ void routeSaveConfiguration(AsyncWebServerRequest *request)
     request->send(200, "text/plain", F("Configuration received. Will attempt connection to WiFi with provided credentials. Will save configuration if successful."));
     delay(250);
 
+    // Backup current config in case connection fails
+    DeviceConfiguration *previousConfig = currentDeviceConfiguration;
     currentDeviceConfiguration = newConfig;
-    saveDeviceConfigurationToEeprom();
+    configMode = false;  // Force STA mode to test the new credentials
+
+    // Test the connection FIRST (before saving)
     if (setupWifi())
     {
-        LOG_PRINTLN(F("Configuration accepted."));
-        // saveQuickRestartsToEeprom(false);
-        // ESP.restart(); // Note: will not reach this point if connection to Wifi is unsuccessful
+        // Connection successful - save to EEPROM
+        saveDeviceConfigurationToEeprom();
+        LOG_PRINTLN(F("Configuration accepted and saved."));
+        if (previousConfig != nullptr)
+            delete previousConfig;  // Free old config
     }
     else
     {
-        LOG_PRINTLN(F("Unable to connect to WiFI, configuration discarded."));
+        // Connection failed - restore previous config and return to AP mode
+        LOG_PRINTLN(F("Unable to connect to WiFi, configuration discarded."));
+        currentDeviceConfiguration = previousConfig;
+        delete newConfig;  // Free new config
+        configMode = true;  // Return to AP mode
+        setupWifi();  // Restart AP mode
     }
 }
 

@@ -67,7 +67,7 @@ extern const char *GITHUB_TOKEN;
     }
 
 // Uncomment the following line to enable debug output.
-// #define DEBUG
+#define DEBUG
 #ifdef DEBUG
 #define DEBUG_PRINT(str) LOG_PRINT(str)
 #define DEBUG_PRINTLN(str) LOG_PRINTLN(str)

@@ -13,12 +13,13 @@ private:
     const char *binaryFileName;
     const char *releaseRepo;
     const char *authToken;
+    const char *apiEndpoint;
 
-    void getLatestReleaseInfo(char *&version, char *&updateURL);
-    bool isNewerVersionAvailable(char *&latestVersion, char *&updateURL);
+    void getLatestReleaseInfo(String &version, String &updateURL);
+    bool isNewerVersionAvailable(String &latestVersion, String &updateURL);
 
 public:
-    ESPGithubOtaUpdate(const char *, const char *, const char *, const char *);
+    ESPGithubOtaUpdate(const char *, const char *, const char *, const char *, const char * = "https://api.github.com");
     void checkForSoftwareUpdate();
     void upgradeSoftware();
     void upgradeSoftware(const char *);

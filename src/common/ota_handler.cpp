@@ -1,4 +1,5 @@
 #include "ota_handler.h"
+#include "globals.h"
 
 #include <ArduinoJson.h>
 
@@ -6,6 +7,7 @@
 #include <HTTPClient.h>
 #include <HTTPUpdate.h>
 #include <WiFi.h>
+#include <esp_task_wdt.h>
 #elif defined(ESP8266)
 #include "esp8266_ota_update.h"
 
@@ -13,23 +15,6 @@
 #include <ESP8266httpUpdate.h>
 #include <ESP8266WiFi.h>
 #endif
-
-#ifndef DEBUG_PRINT
-#define DEBUG
-#ifdef DEBUG
-#define DEBUG_PRINT(str)   \
-    {                      \
-        Serial.print(str); \
-    }
-#define DEBUG_PRINTLN(str)   \
-    {                        \
-        Serial.println(str); \
-    }
-#else
-#define DEBUG_PRINT(str)
-#define DEBUG_PRINTLN(str)
-#endif // #ifdef DEBUG
-#endif // #ifndef DEBUG_PRINT
 
 uint32_t checkForSoftwareUpdateMillis = 60 * 60 * 1000; // check for software update every 1 hour
 uint64_t lastCheckForUpdateMillis = 0;
@@ -47,72 +32,102 @@ WiFiClientSecure getSecureClient()
     return secureClient;
 }
 
-void ESPGithubOtaUpdate::getLatestReleaseInfo(char *&version, char *&updateURL)
+void ESPGithubOtaUpdate::getLatestReleaseInfo(String &version, String &updateURL)
 {
+    // Initialize return values
+    version = "0.0.0";
+    updateURL = "";
+
     WiFiClientSecure secureClient = getSecureClient();
     HTTPClient httpClient;
 
-    String url = String("https://api.github.com/repos/") + releaseRepo + "/releases/latest";
+    // RAII-style cleanup guard to ensure httpClient.end() is always called
+    struct HTTPClientGuard {
+        HTTPClient& client;
+        HTTPClientGuard(HTTPClient& c) : client(c) {}
+        ~HTTPClientGuard() { client.end(); }
+    } guard(httpClient);
+
+    String url = String(apiEndpoint) + "/repos/" + releaseRepo + "/releases/latest";
     String payload;
 
     DEBUG_PRINTLN(String("Requesting ") + url);
-    httpClient.begin(secureClient, url);
+
+    if (!httpClient.begin(secureClient, url))
+    {
+        LOG_PRINTLN(F("OTA: Failed to begin HTTP connection"));
+        return; // Guard will cleanup
+    }
+
+    httpClient.setTimeout(30000);  // 30 second timeout
+    httpClient.setConnectTimeout(10000);  // 10 second connect timeout
     httpClient.addHeader("Authorization", String("token ") + authToken);
+    httpClient.addHeader("Accept", "application/vnd.github.v3+json");
+    httpClient.addHeader("User-Agent", "ESPGithubOtaUpdate/1.0");
     int httpCode = httpClient.GET();
 
     if (httpCode == HTTP_CODE_UNAUTHORIZED)
     {
         if (strlen(authToken) == 0)
-            Serial.println(F("Got 401 Unauthorized, and github token is empty. Check your configuration"));
+            LOG_PRINTLN(F("OTA: 401 Unauthorized - GitHub token is empty"));
         else
-            Serial.println(F("Got 401 Unauthorized. Check if your github token is valid and not expired."));
+            LOG_PRINTLN(F("OTA: 401 Unauthorized - Check GitHub token validity"));
+        return; // Guard will cleanup
     }
 
-    DEBUG_PRINT("OTA Update: got code ");
+    DEBUG_PRINT("OTA Update: got HTTP code ");
     DEBUG_PRINTLN(String(httpCode));
 
-    if (httpCode == HTTP_CODE_OK)
+    if (httpCode != HTTP_CODE_OK)
     {
-        DEBUG_PRINTLN(String("Got response from ") + url);
-        payload = httpClient.getString();
+        return; // Guard will cleanup
+    }
 
-        JsonDocument doc;
-        deserializeJson(doc, payload.c_str());
+    DEBUG_PRINTLN(String("Got response from ") + url);
+    payload = httpClient.getString();
 
-        const char *tagName = doc["tag_name"];
-        JsonArray assets = doc["assets"];
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, payload.c_str());
 
-        for (auto value : assets)
+    if (error)
+    {
+        LOG_PRINTLN("OTA: Failed to parse JSON response");
+        return; // Guard will cleanup
+    }
+
+    const char *tagName = doc["tag_name"];
+    if (!tagName)
+    {
+        LOG_PRINTLN("OTA: No tag_name in response");
+        return; // Guard will cleanup
+    }
+
+    JsonArray assets = doc["assets"];
+    for (auto value : assets)
+    {
+        JsonObject asset = value.as<JsonObject>();
+        const char *name = asset["name"];
+        if (String(name) == binaryFileName)
         {
-            JsonObject asset = value.as<JsonObject>();
-            const char *name = asset["name"];
-            if (String(name) == binaryFileName)
-            {
-                const char *browserDownloadUrl = asset["browser_download_url"];
-                DEBUG_PRINT("OTA Update: found download URL: ");
-                DEBUG_PRINTLN(browserDownloadUrl);
-                version = strdup(tagName);
-                updateURL = strdup(browserDownloadUrl);
-                break;
-            }
+            const char *browserDownloadUrl = asset["browser_download_url"];
+            DEBUG_PRINT("OTA Update: found download URL: ");
+            DEBUG_PRINTLN(browserDownloadUrl);
+            version = String(tagName);
+            updateURL = String(browserDownloadUrl);
+            break;
         }
     }
-    else
-    {
-        version = strdup("0.0.0");
-        updateURL = nullptr;
-    }
 
-    httpClient.end();
+    // Guard destructor will call httpClient.end()
 }
 
-bool ESPGithubOtaUpdate::isNewerVersionAvailable(char *&latestVersion, char *&updateURL)
+bool ESPGithubOtaUpdate::isNewerVersionAvailable(String &latestVersion, String &updateURL)
 {
     getLatestReleaseInfo(latestVersion, updateURL);
     int currentMajor, currentMinor, currentPatch;
     int latestMajor, latestMinor, latestPatch;
     sscanf(currentVersion, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch);
-    sscanf(latestVersion, "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch);
+    sscanf(latestVersion.c_str(), "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch);
     bool newer_firmware = (latestMajor > currentMajor) ||
                           (latestMajor == currentMajor && latestMinor > currentMinor) ||
                           (latestMajor == currentMajor && latestMinor == currentMinor && latestPatch > currentPatch);
@@ -125,7 +140,7 @@ bool ESPGithubOtaUpdate::isNewerVersionAvailable(char *&latestVersion, char *&up
     return newer_firmware;
 }
 
-ESPGithubOtaUpdate::ESPGithubOtaUpdate(const char *v, const char *b, const char *r, const char *a) : currentVersion(v), binaryFileName(b), releaseRepo(r), authToken(a)
+ESPGithubOtaUpdate::ESPGithubOtaUpdate(const char *v, const char *b, const char *r, const char *a, const char *endpoint) : currentVersion(v), binaryFileName(b), releaseRepo(r), authToken(a), apiEndpoint(endpoint)
 {
 #ifdef ESP8266
     setupEsp8266OtaUpdate();
@@ -141,50 +156,69 @@ void ESPGithubOtaUpdate::upgradeSoftware()
         DEBUG_PRINTLN(F("OTA Updater not inited. Exiting"));
         return;
     }
-    char *latestVersion = nullptr;
-    char *updateURL = nullptr;
-    if (isNewerVersionAvailable(latestVersion, updateURL) && updateURL != nullptr)
+    String latestVersion;
+    String updateURL;
+    if (isNewerVersionAvailable(latestVersion, updateURL) && updateURL.length() > 0)
     {
-        upgradeSoftware(updateURL);
+        upgradeSoftware(updateURL.c_str());
     }
     else
     {
-        Serial.println("Couldn't find new firmware");
+        LOG_PRINTLN("OTA: No new firmware available");
     }
-    if (latestVersion)
-        free(latestVersion);
-    if (updateURL)
-        free(updateURL);
 }
 
 void ESPGithubOtaUpdate::upgradeSoftware(const char *updateURL)
 {
     if (!isInited || updateURL == nullptr || strlen(updateURL) == 0)
     {
-        Serial.println("OTA-Handler not initiated or invalid update URL.");
+        LOG_PRINTLN("OTA: Handler not initialized or invalid update URL");
+        return;
+    }
+
+    // Check WiFi connection before attempting update
+    if (WiFi.status() != WL_CONNECTED)
+    {
+        LOG_PRINTLN("OTA: WiFi not connected, aborting update");
         return;
     }
 
     WiFiClientSecure secureClient = getSecureClient();
 
 #ifdef ESP32
+    // Feed watchdog and setup progress callback for ESP32
+    esp_task_wdt_reset();
+    httpUpdate.onProgress([](int current, int total) {
+        esp_task_wdt_reset();  // Feed watchdog during update
+        if (current % (total / 10) == 0) {  // Print every 10%
+            Serial.printf("OTA Progress: %d%%\n", (current * 100) / total);
+        }
+    });
     t_httpUpdate_return ret = httpUpdate.update(secureClient, updateURL, currentVersion);
 #elif defined(ESP8266)
+    // Feed watchdog and setup progress callback for ESP8266
+    ESP.wdtFeed();
+    ESPhttpUpdate.onProgress([](int current, int total) {
+        ESP.wdtFeed();  // Feed watchdog during update
+        if (current % (total / 10) == 0) {  // Print every 10%
+            Serial.printf("OTA Progress: %d%%\n", (current * 100) / total);
+        }
+    });
     t_httpUpdate_return ret = ESPhttpUpdate.update(secureClient, updateURL, currentVersion);
 #endif
 
     if (ret == HTTP_UPDATE_OK)
     {
-        Serial.println("Update successfully completed. Rebooting...");
+        LOG_PRINTLN("OTA: Update successful, rebooting...");
         ESP.restart();
     }
     else
     {
         // If the update fails, print the error code and message
 #ifdef ESP32
-        Serial.printf("HTTP Update failed error (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
+        LOG_PRINTLN("OTA: Update failed error (" + String(httpUpdate.getLastError()) + "): " + httpUpdate.getLastErrorString());
 #elif defined(ESP8266)
-        Serial.printf("HTTP Update failed error (%d): %s\n", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+        LOG_PRINTLN("OTA: Update failed error (" + String(ESPhttpUpdate.getLastError()) + "): " + ESPhttpUpdate.getLastErrorString());
 #endif
     }
 }
@@ -227,50 +261,58 @@ void ESPGithubOtaUpdate::registerFirmwareUploadRoutes(AsyncWebServer *webServer,
     webServer->on("/firmwareUploadSave", HTTP_POST, [](AsyncWebServerRequest *request) {}, // Placeholder for final response to the client, actual response will be sent in the upload handler
                   [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final)
                   {
+        static bool uploadError = false;
+
         if (!index)
         {
-            Serial.printf("Update Start: %s\n", filename.c_str());
+            uploadError = false;
+            LOG_PRINTLN("Firmware upload started: " + filename);
 
-            bool updateStartOk = false;
-
-            updateStartOk = Update.begin(UPDATE_SIZE_UNKNOWN);
-            if (!updateStartOk)
+            // Validate filename
+            if (!filename.endsWith(".bin"))
             {
-                Update.printError(Serial);
-                request->send(500, "text/plain", "Update failed at start");
-                delay(2000);
+                uploadError = true;
+                request->send(400, "text/plain", "Invalid firmware file - must be .bin");
                 return;
             }
-            else
-            {
-                Serial.println("Update Started");
-                // printMemoryStatus(); // Print memory status after starting the update
-            }
 
-            Serial.println("Debug here 1");
+            if (!Update.begin(UPDATE_SIZE_UNKNOWN))
+            {
+                Update.printError(Serial);
+                request->send(500, "text/plain", "Update failed to start");
+                uploadError = true;
+                return;
+            }
+            LOG_PRINTLN("Firmware upload started successfully");
         }
 
-        Serial.println("Debug here 2");
+        if (uploadError)
+        {
+            return; // Skip processing if error occurred
+        }
 
-        // Debugging before writing data
-        Serial.printf("Writing %u bytes at index %u\n", len, index);
+        // Feed watchdog during upload
+        #ifdef ESP32
+            esp_task_wdt_reset();
+        #elif defined(ESP8266)
+            ESP.wdtFeed();
+        #endif
 
         // Write received data to the update
         if (Update.write(data, len) != len)
         {
             Update.printError(Serial);
             request->send(500, "text/plain", "Update failed during write");
-            delay(2000);
+            uploadError = true;
+            Update.abort();
             return;
         }
-
-        yield(); // Yield to keep the system responsive during the long write process
 
         if (final)
         {
             if (Update.end(true))
             {
-                Serial.printf("Update Success: %uB\n", index + len);
+                LOG_PRINTLN("Firmware upload complete: " + String(index + len) + " bytes");
                 request->send(200, "text/plain", "Upload complete, device will restart.");
                 delay(3000); // Short delay to ensure the response is sent before reboot
                 ESP.restart();

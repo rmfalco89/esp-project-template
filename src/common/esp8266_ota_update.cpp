@@ -4,7 +4,8 @@
 #include <ESP8266WebServer.h>
 #include <Updater.h>
 
-ESP8266WebServer otaServer(8888);
+const int OTA_SERVER_PORT = 8888;
+ESP8266WebServer otaServer(OTA_SERVER_PORT);
 
 void setupEsp8266OtaUpdate() {
     otaServer.on("/", HTTP_GET, []() {
@@ -22,10 +23,14 @@ void setupEsp8266OtaUpdate() {
         HTTPUpload& upload = otaServer.upload();
         if (upload.status == UPLOAD_FILE_START) {
             Serial.printf("Update Start: %s\n", upload.filename.c_str());
-            if (!Update.begin(ESP.getFreeSketchSpace())) {
+            // Use proper size calculation with alignment and safety margin
+            uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
+            if (!Update.begin(maxSketchSpace)) {
                 Update.printError(Serial);
             }
         } else if (upload.status == UPLOAD_FILE_WRITE) {
+            // Feed watchdog during upload
+            ESP.wdtFeed();
             if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
                 Update.printError(Serial);
             }
@@ -39,7 +44,9 @@ void setupEsp8266OtaUpdate() {
         yield(); // Keep the watchdog timer happy
     });
 
+    // Attempt to start server and log result
     otaServer.begin();
+    Serial.printf("ESP8266 OTA server started on port %d\n", OTA_SERVER_PORT);
 }
 
 void handleEsp8266OtaUpdate() {
